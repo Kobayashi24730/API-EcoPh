@@ -29,9 +29,7 @@ def enviar_ph():
 
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-
     cursor.execute("INSERT INTO ph (valor, horario) VALUES (?, ?)", (ph, horario))
-
     conn.commit()
     conn.close()
 
@@ -41,14 +39,14 @@ def enviar_ph():
 def obter_ph():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT valor, horario FROM ph ORDER BY id DESC LIMIT 1")
-    resultado = cursor.fetchone()
+    cursor.execute("SELECT valor, horario FROM ph ORDER BY id DESC LIMIT 20")
+    resultados = cursor.fetchall()
     conn.close()
 
-    if resultado:
-        return jsonify({"ph": resultado[0], "horario": resultado[1]})
-    else:
-        return jsonify({"ph": None, "horario": None})
+    return jsonify([
+        {"ph": row[0], "horario": row[1]}
+        for row in resultados
+    ])
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
