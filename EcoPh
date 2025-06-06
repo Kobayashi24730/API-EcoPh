@@ -7,6 +7,7 @@ import pandas as pd
 import os
 
 API_URL = "https://api-ecoph.onrender.com/obter"
+SENHA_ADMIN = "1234" 
 
 # ---------------- Funções auxiliares ---------------- #
 
@@ -143,8 +144,191 @@ def iniciar_visualizacao():
     canvas.draw()
     mostrar_dados_sequencial(buscar_dados())
 
+
+# ---------------- NOVAS FUNÇÕES: Administração e Histórico ---------------- #
+
+def abrir_historico():
+    try:
+        dados = buscar_dados()
+        if not dados:
+            messagebox.showwarning("Aviso", "Nenhum dado disponível.")
+            return
+
+        janela_hist = tk.Toplevel(app)
+        janela_hist.title("Histórico de Dados")
+        janela_hist.geometry("600x400")
+
+        frame_tabela = tk.Frame(janela_hist)
+        frame_tabela.pack(fill=tk.BOTH, expand=True)
+
+        tabela = tk.Text(frame_tabela, font=("Courier", 10))
+        tabela.pack(fill=tk.BOTH, expand=True)
+
+        # Cabeçalho
+        tabela.insert(tk.END, f"{'ID':<6}{'Horário':<25}{'pH':<5}\n")
+        tabela.insert(tk.END, "-" * 50 + "\n")
+
+        for i, d in enumerate(dados[::-1]):  # mais recente em cima
+            ph = d.get("ph", "N/A")
+            horario = d.get("horario", "N/A")
+            tabela.insert(tk.END, f"{i:<6}{horario:<25}{ph:<5}\n")
+
+        tabela.config(state=tk.DISABLED)
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao abrir histórico:\n{e}")
+
 def abrir_administracao():
-    messagebox.showinfo("Administração", "Acesso ao painel administrativo.\n(Módulo ainda em desenvolvimento)")
+    # Tela de login simples para senha
+    def verificar_senha():
+        senha = entrada_senha.get()
+        if senha == SENHA_ADMIN:
+            janela_login.destroy()
+            abrir_painel_admin()
+        else:
+            messagebox.showerror("Erro", "Senha incorreta!")
+
+    janela_login = tk.Toplevel(app)
+    janela_login.title("Login Admin")
+    janela_login.geometry("300x120")
+    janela_login.resizable(False, False)
+
+    tk.Label(janela_login, text="Digite a senha de admin:").pack(pady=10)
+    entrada_senha = tk.Entry(janela_login, show="*")
+    entrada_senha.pack(pady=5)
+    btn_entrar = tk.Button(janela_login, text="Entrar", command=verificar_senha)
+    btn_entrar.pack(pady=5)
+
+def abrir_painel_admin():
+    dados = buscar_dados()
+    if not dados:
+        messagebox.showwarning("Aviso", "Nenhum dado disponível.")
+        return
+
+    admin_win = tk.Toplevel(app)
+    admin_win.title("Painel Administrativo")
+    admin_win.geometry("800x600")
+
+    # Frame de filtro
+    filtro_frame = tk.Frame(admin_win)
+    filtro_frame.pack(pady=10)
+
+    tk.Label(filtro_frame, text="pH mínimo:").grid(row=0, column=0, padx=5)
+    ph_min_entry = tk.Entry(filtro_frame, width=10)
+    ph_min_entry.grid(row=0, column=1, padx=5)
+    ph_min_entry.insert(0, "0")
+
+    tk.Label(filtro_frame, text="pH máximo:").grid(row=0, column=2, padx=5)
+    ph_max_entry = tk.Entry(filtro_frame, width=10)
+    ph_max_entry.grid(row=0, column=3, padx=5)
+    ph_max_entry.insert(0, "14")
+
+    var_fora_padrao = tk.IntVar()
+    chk_fora_padrao = tk.Checkbutton(filtro_frame, text="Exibir só registros fora do padrão (pH < 6.0 ou > 9.0)", variable=var_fora_padrao)
+    chk_fora_padrao.grid(row=1, column=0, columnspan=4, pady=5)
+
+    btn_filtrar = tk.Button(filtro_frame, text="Aplicar Filtro")
+    btn_filtrar.grid(row=2, column=0, columnspan=4, pady=5)
+
+    # Lista dos dados filtrados
+    lista_dados = tk.Listbox(admin_win, font=("Courier", 10))
+    lista_dados.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+    # Frame para resumo estatístico e botões
+    resumo_frame = tk.Frame(admin_win)
+    resumo_frame.pack(fill=tk.X, padx=10)
+
+    lbl_resumo = tk.Label(resumo_frame, text="Resumo estatístico:")
+    lbl_resumo.pack(side=tk.LEFT)
+
+    btn_exportar_filtrado = tk.Button(resumo_frame, text="Exportar dados filtrados CSV")
+    btn_exportar_filtrado.pack(side=tk.RIGHT, padx=5)
+
+    # Gráfico do filtro
+    fig_admin = Figure(figsize=(6, 3), dpi=100)
+    ax_admin = fig_admin.add_subplot(111)
+    canvas_admin = FigureCanvasTkAgg(fig_admin, master=admin_win)
+    canvas_admin.get_tk_widget().pack(fill=tk.BOTH, expand=False, padx=10, pady=5)
+
+    # Função para aplicar filtro e atualizar a lista e gráfico
+    def aplicar_filtro():
+        try:
+            ph_min = float(ph_min_entry.get())
+            ph_max = float(ph_max_entry.get())
+            mostrar_fora_padrao = var_fora_padrao.get() == 1
+        except ValueError:
+            messagebox.showerror("Erro", "Valores de pH inválidos.")
+            return
+
+        filtrados = []
+        for d in dados:
+            try:
+                ph_val = float(d.get("ph", 7))
+            except:
+                ph_val = 7
+            if mostrar_fora_padrao:
+                if ph_val < 6.0 or ph_val > 9.0:
+                    filtrados.append(d)
+            else:
+                if ph_min <= ph_val <= ph_max:
+                    filtrados.append(d)
+
+        lista_dados.delete(0, tk.END)
+        phs_filtrados = []
+        horarios_filtrados = []
+
+        for i, d in enumerate(filtrados[::-1]):  # mostra do mais recente ao mais antigo
+            ph_val = d.get("ph", "N/A")
+            horario = d.get("horario", "N/A")
+            lista_dados.insert(tk.END, f"{i:<5} {horario:<25} pH: {ph_val}")
+            try:
+                phs_filtrados.append(float(ph_val))
+                horarios_filtrados.append(horario.split(" ")[1])  # só hora
+            except:
+                pass
+
+        if phs_filtrados:
+            media = sum(phs_filtrados) / len(phs_filtrados)
+            minimo = min(phs_filtrados)
+            maximo = max(phs_filtrados)
+            total = len(phs_filtrados)
+            lbl_resumo.config(text=f"Resumo estatístico: Média={media:.2f} | Min={minimo:.2f} | Max={maximo:.2f} | Total={total}")
+        else:
+            lbl_resumo.config(text="Resumo estatístico: Nenhum dado para mostrar.")
+
+        # Atualiza gráfico
+        ax_admin.clear()
+        ax_admin.set_title("Gráfico pH filtrado")
+        ax_admin.set_xlabel("Hora")
+        ax_admin.set_ylabel("pH")
+        ax_admin.grid(True)
+        ax_admin.plot(horarios_filtrados, phs_filtrados, marker='o', color='green')
+        ax_admin.tick_params(axis='x', rotation=45)
+        fig_admin.tight_layout()
+        canvas_admin.draw()
+
+        # Guardar dados filtrados para exportar
+        admin_win.filtrados = filtrados
+
+    def exportar_filtrados_csv():
+        try:
+            if not hasattr(admin_win, 'filtrados') or not admin_win.filtrados:
+                messagebox.showwarning("Aviso", "Nenhum dado filtrado para exportar.")
+                return
+            caminho = filedialog.asksaveasfilename(defaultextension=".csv",
+                                                    filetypes=[("Arquivo CSV", "*.csv")],
+                                                    title="Salvar dados filtrados como")
+            if caminho:
+                df_exp = pd.DataFrame(admin_win.filtrados)
+                df_exp.to_csv(caminho, index=False)
+                messagebox.showinfo("Sucesso", f"Dados exportados para:\n{caminho}")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao exportar dados filtrados:\n{e}")
+
+    btn_filtrar.config(command=aplicar_filtro)
+    btn_exportar_filtrado.config(command=exportar_filtrados_csv)
+
+    # Chama filtro inicial para mostrar todos os dados
+    aplicar_filtro()
 
 # ---------------- Interface Gráfica ---------------- #
 
@@ -159,6 +343,8 @@ barra_menu = tk.Menu(app)
 menu_infos = tk.Menu(barra_menu, tearoff=0)
 menu_infos.add_command(label="Administração", command=abrir_administracao)
 menu_infos.add_command(label="Histórico de dados", command=abrir_administracao)
+menu_infos.delete(1)  # remove placeholder do histórico
+menu_infos.add_command(label="Histórico de dados", command=abrir_historico)
 barra_menu.add_cascade(label="Menu", menu=menu_infos)
 
 # Exportar
