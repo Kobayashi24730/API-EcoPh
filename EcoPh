@@ -1,12 +1,77 @@
 import tkinter as tk
-from tkinter import Tk, messagebox
+from tkinter import Tk, messagebox, filedialog
 import requests
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import pandas as pd
+import os
 
 API_URL = "https://api-ecoph.onrender.com/obter"
 
-# Função para buscar dados da API
+# ---------------- Funções auxiliares ---------------- #
+
+# Exportar dados para CSV
+def exportar_csv():
+    try:
+        dados = buscar_dados()
+        if not dados:
+            messagebox.showwarning("Aviso", "Nenhum dado para exportar.")
+            return
+
+        caminho = filedialog.asksaveasfilename(defaultextension=".csv",
+                                                filetypes=[("Arquivo CSV", "*.csv")],
+                                                title="Salvar como")
+        if caminho:
+            df_export = pd.DataFrame(dados)
+            df_export.to_csv(caminho, index=False)
+            messagebox.showinfo("Sucesso", f"Dados exportados para:\n{caminho}")
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao exportar dados:\n{e}")
+
+# Exibir estatísticas
+def mostrar_estatisticas():
+    try:
+        if df.empty:
+            messagebox.showwarning("Aviso", "Nenhum dado disponível.")
+            return
+        phs = df["ph"].astype(float)
+        estat = (
+            f"Média: {phs.mean():.2f}\n"
+            f"Mínimo: {phs.min():.2f}\n"
+            f"Máximo: {phs.max():.2f}\n"
+            f"Quantidade: {len(phs)}"
+        )
+        messagebox.showinfo("Estatísticas do pH", estat)
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao calcular estatísticas:\n{e}")
+
+# Alternar tema claro/escuro
+tema_escuro = False
+def alternar_tema():
+    global tema_escuro
+    tema_escuro = not tema_escuro
+    cor_fundo = "#222222" if tema_escuro else "#f0f0f0"
+    cor_texto = "white" if tema_escuro else "black"
+    main_frame.config(bg=cor_fundo)
+    right_frame.config(bg=cor_fundo)
+    bottom_frame.config(bg=cor_fundo)
+    listbox.config(bg=cor_fundo, fg=cor_texto)
+    right_listbox.config(bg=cor_fundo, fg=cor_texto)
+
+# Mostrar ajuda
+def mostrar_ajuda():
+    texto = (
+        "Projeto EcoPH\n"
+        "Monitoramento em tempo real dos níveis de pH da água.\n\n"
+        "Desenvolvido para o programa Respostas para o Amanhã.\n"
+        "Ideal para uso educacional e ambiental.\n\n"
+        "Use 'Atualizar Dados' para buscar os dados e visualizar.\n"
+        "Use o menu para exportar, ver estatísticas e mais."
+    )
+    messagebox.showinfo("Sobre o EcoPH", texto)
+
+# ---------------- Funções principais ---------------- #
+
 def buscar_dados():
     try:
         resp = requests.get(API_URL, timeout=5)
@@ -19,20 +84,16 @@ def buscar_dados():
         print("Erro ao buscar dados:", e)
         return []
 
-# Define o que acontece quando o pH está em níveis críticos
 def verificar_risco(ph):
     info = []
-
     if ph < 5.0:
         info.append("[Alerta] pH muito ácido! Pode causar queimaduras na pele e morte de peixes.")
     elif ph < 6.5:
         info.append("[Alerta] pH levemente ácido. Pode prejudicar plantas aquáticas.")
     elif ph > 8.5:
         info.append("[Alerta] pH muito alcalino! Pode causar irritações na pele e morte de organismos.")
-    
     return info
 
-# Sugestões para neutralizar o pH
 def sugestoes_para_ph(ph):
     if ph < 7.0:
         return ["[Sugestao] Adicionar bicarbonato de sódio", "[Sugestao] Usar calcário agrícola", "[Sugestao] Reduzir fontes de poluição ácida"]
@@ -41,7 +102,6 @@ def sugestoes_para_ph(ph):
     else:
         return ["[Sugestao] pH está neutro. Sem ação necessária."]
 
-# Mostrar dados sequencialmente com gráfico e notificações
 def mostrar_dados_sequencial(dados, i=0, valores=None, tempos=None):
     if valores is None: valores = []
     if tempos is None: tempos = []
@@ -54,12 +114,10 @@ def mostrar_dados_sequencial(dados, i=0, valores=None, tempos=None):
         tempos.append(horario.split(" ")[1])  # Apenas hora
         listbox.insert(tk.END, f"pH: {ph:.2f}  |  {horario}")
 
-        # Notificações
         riscos = verificar_risco(ph)
         if riscos:
             messagebox.showwarning("Alerta de Risco!", "\n".join(riscos))
 
-        # Atualizar gráfico
         ax.clear()
         ax.set_title("Variação do pH", fontsize=14)
         ax.set_ylabel("pH", fontsize=12)
@@ -70,7 +128,6 @@ def mostrar_dados_sequencial(dados, i=0, valores=None, tempos=None):
         fig.tight_layout()
         canvas.draw()
 
-        # Atualizar sugestões laterais
         right_listbox.delete(0, tk.END)
         right_listbox.insert(tk.END, ">> Efeitos e Soluções <<")
         for r in verificar_risco(ph):
@@ -80,29 +137,46 @@ def mostrar_dados_sequencial(dados, i=0, valores=None, tempos=None):
 
         app.after(2000, lambda: mostrar_dados_sequencial(dados, i+1, valores, tempos))
 
-# Inicializa a visualização
 def iniciar_visualizacao():
     listbox.delete(0, tk.END)
     ax.clear()
     canvas.draw()
     mostrar_dados_sequencial(buscar_dados())
 
-# Função para menu de administração
 def abrir_administracao():
     messagebox.showinfo("Administração", "Acesso ao painel administrativo.\n(Módulo ainda em desenvolvimento)")
 
-# ----- Interface Tkinter -----
+# ---------------- Interface Gráfica ---------------- #
+
 app = Tk()
 app.title("Monitor de pH Online")
 app.geometry("1500x700")
 
 # Menu
 barra_menu = tk.Menu(app)
+
+# Menu principal
 menu_infos = tk.Menu(barra_menu, tearoff=0)
 menu_infos.add_command(label="Administração", command=abrir_administracao)
-menu_infos.add_command(label="Historico de dados", command=abrir_administracao)
-menu_infos.add_separator()
+menu_infos.add_command(label="Histórico de dados", command=abrir_administracao)
 barra_menu.add_cascade(label="Menu", menu=menu_infos)
+
+# Exportar
+menu_exportar = tk.Menu(barra_menu, tearoff=0)
+menu_exportar.add_command(label="Exportar para CSV", command=exportar_csv)
+barra_menu.add_cascade(label="Exportar", menu=menu_exportar)
+
+# Visualizar
+menu_visualizar = tk.Menu(barra_menu, tearoff=0)
+menu_visualizar.add_command(label="Ver Estatísticas", command=mostrar_estatisticas)
+menu_visualizar.add_command(label="Alternar Tema Claro/Escuro", command=alternar_tema)
+barra_menu.add_cascade(label="Visualizar", menu=menu_visualizar)
+
+# Ajuda
+menu_ajuda = tk.Menu(barra_menu, tearoff=0)
+menu_ajuda.add_command(label="Sobre o Projeto", command=mostrar_ajuda)
+barra_menu.add_cascade(label="Ajuda", menu=menu_ajuda)
+
 app.config(menu=barra_menu)
 
 # Frame principal
@@ -119,7 +193,7 @@ canvas.get_tk_widget().place(x=10, y=40, width=600, height=400)
 tk.Label(main_frame, text="Tabela", font=("Arial", 14, "bold")).place(x=630, y=10)
 scrollbar = tk.Scrollbar(main_frame)
 scrollbar.place(x=950, y=40, height=400)
-listbox = tk.Listbox(main_frame, font=("Courier", 12),)
+listbox = tk.Listbox(main_frame, font=("Courier", 12))
 listbox.place(x=630, y=40, width=320, height=400)
 scrollbar.config(command=listbox.yview)
 
@@ -129,7 +203,6 @@ right_frame.place(x=1020, y=10, width=460, height=500)
 tk.Label(right_frame, text="Informações sobre o pH", font=("Arial", 14), wraplength=250).place(x=10, y=10)
 right_listbox = tk.Listbox(right_frame, font=("Courier", 9))
 right_listbox.place(x=10, y=50, width=440, height=420)
-
 
 # Frame inferior
 bottom_frame = tk.Frame(app, bg="#d0d0d0", bd=2, relief="sunken")
