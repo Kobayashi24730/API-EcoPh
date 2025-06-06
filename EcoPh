@@ -1,0 +1,142 @@
+import tkinter as tk
+from tkinter import Tk, messagebox
+import requests
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+API_URL = "https://api-ecoph.onrender.com/obter"
+
+# Função para buscar dados da API
+def buscar_dados():
+    try:
+        resp = requests.get(API_URL, timeout=5)
+        resp.raise_for_status()
+        dados = resp.json()
+        global df
+        df = pd.DataFrame(dados)
+        return resp.json()[::-1]
+    except Exception as e:
+        print("Erro ao buscar dados:", e)
+        return []
+
+# Define o que acontece quando o pH está em níveis críticos
+def verificar_risco(ph):
+    info = []
+
+    if ph < 5.0:
+        info.append("[Alerta] pH muito ácido! Pode causar queimaduras na pele e morte de peixes.")
+    elif ph < 6.5:
+        info.append("[Alerta] pH levemente ácido. Pode prejudicar plantas aquáticas.")
+    elif ph > 8.5:
+        info.append("[Alerta] pH muito alcalino! Pode causar irritações na pele e morte de organismos.")
+    
+    return info
+
+# Sugestões para neutralizar o pH
+def sugestoes_para_ph(ph):
+    if ph < 7.0:
+        return ["[Sugestao] Adicionar bicarbonato de sódio", "[Sugestao] Usar calcário agrícola", "[Sugestao] Reduzir fontes de poluição ácida"]
+    elif ph > 7.0:
+        return ["[Sugestao] Adicionar vinagre ou ácido cítrico", "[Sugestao] Plantar vegetação que absorve alcalinidade", "[Sugestao] Monitorar despejos de soda cáustica"]
+    else:
+        return ["[Sugestao] pH está neutro. Sem ação necessária."]
+
+# Mostrar dados sequencialmente com gráfico e notificações
+def mostrar_dados_sequencial(dados, i=0, valores=None, tempos=None):
+    if valores is None: valores = []
+    if tempos is None: tempos = []
+
+    if i < len(dados):
+        d = dados[i]
+        ph = float(d.get("ph", 7.0))
+        horario = d.get("horario")
+        valores.append(ph)
+        tempos.append(horario.split(" ")[1])  # Apenas hora
+        listbox.insert(tk.END, f"pH: {ph:.2f}  |  {horario}")
+
+        # Notificações
+        riscos = verificar_risco(ph)
+        if riscos:
+            messagebox.showwarning("Alerta de Risco!", "\n".join(riscos))
+
+        # Atualizar gráfico
+        ax.clear()
+        ax.set_title("Variação do pH", fontsize=14)
+        ax.set_ylabel("pH", fontsize=12)
+        ax.set_xlabel("Hora", fontsize=12)
+        ax.grid(True)
+        ax.plot(tempos, valores, marker='o', color='blue')
+        ax.tick_params(axis='x', rotation=45)
+        fig.tight_layout()
+        canvas.draw()
+
+        # Atualizar sugestões laterais
+        right_listbox.delete(0, tk.END)
+        right_listbox.insert(tk.END, ">> Efeitos e Soluções <<")
+        for r in verificar_risco(ph):
+            right_listbox.insert(tk.END, f"- {r}")
+        for s in sugestoes_para_ph(ph):
+            right_listbox.insert(tk.END, f"* {s}")
+
+        app.after(2000, lambda: mostrar_dados_sequencial(dados, i+1, valores, tempos))
+
+# Inicializa a visualização
+def iniciar_visualizacao():
+    listbox.delete(0, tk.END)
+    ax.clear()
+    canvas.draw()
+    mostrar_dados_sequencial(buscar_dados())
+
+# Função para menu de administração
+def abrir_administracao():
+    messagebox.showinfo("Administração", "Acesso ao painel administrativo.\n(Módulo ainda em desenvolvimento)")
+
+# ----- Interface Tkinter -----
+app = Tk()
+app.title("Monitor de pH Online")
+app.geometry("1500x700")
+
+# Menu
+barra_menu = tk.Menu(app)
+menu_infos = tk.Menu(barra_menu, tearoff=0)
+menu_infos.add_command(label="Administração", command=abrir_administracao)
+menu_infos.add_command(label="Historico de dados", command=abrir_administracao)
+menu_infos.add_separator()
+barra_menu.add_cascade(label="Menu", menu=menu_infos)
+app.config(menu=barra_menu)
+
+# Frame principal
+main_frame = tk.Frame(app, bg="#f0f0f0", bd=2, relief="groove")
+main_frame.place(x=10, y=10, width=1000, height=500)
+
+tk.Label(main_frame, text="Gráfico", font=("Arial", 14, "bold")).place(x=10, y=10)
+fig = Figure(figsize=(5, 3), dpi=100)
+ax = fig.add_subplot(111)
+canvas = FigureCanvasTkAgg(fig, master=main_frame)
+canvas.draw()
+canvas.get_tk_widget().place(x=10, y=40, width=600, height=400)
+
+tk.Label(main_frame, text="Tabela", font=("Arial", 14, "bold")).place(x=630, y=10)
+scrollbar = tk.Scrollbar(main_frame)
+scrollbar.place(x=950, y=40, height=400)
+listbox = tk.Listbox(main_frame, font=("Courier", 12),)
+listbox.place(x=630, y=40, width=320, height=400)
+scrollbar.config(command=listbox.yview)
+
+# Frame lateral direita
+right_frame = tk.Frame(app, bg="#e0e0e0", bd=2, relief="groove")
+right_frame.place(x=1020, y=10, width=460, height=500)
+tk.Label(right_frame, text="Informações sobre o pH", font=("Arial", 14), wraplength=250).place(x=10, y=10)
+right_listbox = tk.Listbox(right_frame, font=("Courier", 9))
+right_listbox.place(x=10, y=50, width=440, height=420)
+
+
+# Frame inferior
+bottom_frame = tk.Frame(app, bg="#d0d0d0", bd=2, relief="sunken")
+bottom_frame.place(x=10, y=520, width=1270, height=150)
+btn_atualizar = tk.Button(bottom_frame, text="Atualizar Dados", font=("Arial", 12), command=iniciar_visualizacao)
+btn_atualizar.place(x=20, y=20, width=150, height=40)
+
+# Início automático
+iniciar_visualizacao()
+app.mainloop()
