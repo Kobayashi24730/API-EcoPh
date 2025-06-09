@@ -5,7 +5,6 @@ from datetime import datetime
 app = Flask(__name__)
 DB_FILE = 'dados.db'
 
-# Inicializa o banco e cria tabela se não existir
 def inicializar_banco():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -40,6 +39,19 @@ def obter_ph():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT valor, horario FROM (SELECT * FROM ph ORDER BY id DESC LIMIT 20) ORDER BY id ASC")
+    resultados = cursor.fetchall()
+    conn.close()
+
+    return jsonify([
+        {"ph": row[0], "horario": row[1]}
+        for row in resultados
+    ])
+
+@app.route('/obter_todos', methods=['GET'])
+def obter_todos_ph():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT valor, horario FROM ph ORDER BY id ASC")
     resultados = cursor.fetchall()
     conn.close()
 
