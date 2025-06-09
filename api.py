@@ -39,7 +39,7 @@ def enviar_ph():
 def obter_ph():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT valor, horario FROM ph ORDER BY id DESC LIMIT 20")
+    cursor.execute("SELECT valor, horario FROM (SELECT * FROM ph ORDER BY id DESC LIMIT 20) ORDER BY id ASC")
     resultados = cursor.fetchall()
     conn.close()
 
