@@ -47,18 +47,5 @@ def obter_ph():
         for row in resultados
     ])
 
-@app.route('/obter_todos', methods=['GET'])
-def obter_todos_ph():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT valor, horario FROM ph ORDER BY id ASC")
-    resultados = cursor.fetchall()
-    conn.close()
-
-    return jsonify([
-        {"ph": row[0], "horario": row[1]}
-        for row in resultados
-    ])
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
